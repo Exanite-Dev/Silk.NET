@@ -2,3 +2,20 @@ name: Native Builds
 
 on:
   workflow_dispatch: 
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: false
+  
+jobs:
+  check:
+    name: Check PR comment
+    runs-on: ubuntu-latest
+
+  steps:
+
+    - name: TODO
+      run: echo TODO
