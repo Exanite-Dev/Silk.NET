@@ -15,7 +15,7 @@ jobs:
     name: Check PR comment
     runs-on: ubuntu-latest
 
-  steps:
-    
-    - name: TODO
-      run: echo TODO
+    steps:
+      
+      - name: TODO
+        run: echo TODO
