@@ -1,0 +1,4 @@
+name: Bindings Regeneration
+
+on:
+  workflow_dispatch:
