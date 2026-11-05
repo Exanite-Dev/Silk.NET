@@ -14,7 +14,7 @@ catch {}
 
 # PR Comment
 $mustComment = $false
-$comment = "## Silk bindings regeneration reminder"
+$comment = "## Silk.NET native build reminder"
 
 if ($previousCommentId -eq "0") {
   $previousCommentId = ""
@@ -26,9 +26,9 @@ if ($previousCommentId) {
 
 if ($affectedJobs.Count -gt 0) {
   $mustComment = $true
-  $comment += "`n`nSome of the bindings are likely affected by this PR. \`nPlease regenerate these by posting a comment with ``/bindings $affectedJobs``. \`nYou must have push permissions to run the command.`n`nIf you believe this to be in error, then please write a comment explaining why and ignore this reminder."
+  $comment += "`n`nSome of the native builds are likely affected by this PR. \`nPlease rebuild these by posting a comment with ``/native $affectedJobs``. \`nYou must have push permissions to run the command.`n`nIf you believe this to be in error, then please write a comment explaining why and ignore this reminder."
 } else {
-  $comment += "`n`nNo bindings are likely to have been affected by this PR."
+  $comment += "`n`nNo native builds are likely to have been affected by this PR."
 }
 
 if ($mustComment) {
