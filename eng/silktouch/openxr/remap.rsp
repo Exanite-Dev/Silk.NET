@@ -1,6 +1,6 @@
 @../../remap-stdint.rsp
 --remap
-VkFilter=uint
+VkFilter=FORTESTING
 VkSamplerMipmapMode=uint
 VkSamplerAddressMode=uint
 VkComponentSwizzle=uint
