@@ -8240,7 +8240,7 @@ public unsafe partial class AL : IAL, IAL.Static
         ]
         public static extern int EaxGetDirect(
             ContextHandle context,
-            System.Guid* property_set_id,
+            ForTestingOnlyHandle property_set_id,
             uint property_id,
             uint source_id,
             void* value,
@@ -8258,7 +8258,7 @@ public unsafe partial class AL : IAL, IAL.Static
         )]
         public static int EaxGetDirect(
             ContextHandle context,
-            Ref<System.Guid> property_set_id,
+            ForTestingOnlyHandle property_set_id,
             uint property_id,
             uint source_id,
             Ref value,
@@ -8266,11 +8266,10 @@ public unsafe partial class AL : IAL, IAL.Static
         )
         {
             fixed (void* __dsl_value = value)
-            fixed (System.Guid* __dsl_property_set_id = property_set_id)
             {
                 return (int)EaxGetDirect(
                     context,
-                    __dsl_property_set_id,
+                    property_set_id,
                     property_id,
                     source_id,
                     __dsl_value,
@@ -8323,7 +8322,7 @@ public unsafe partial class AL : IAL, IAL.Static
         ]
         public static extern int EaxSetDirect(
             ContextHandle context,
-            System.Guid* property_set_id,
+            ForTestingOnlyHandle property_set_id,
             uint property_id,
             uint source_id,
             void* value,
@@ -8341,7 +8340,7 @@ public unsafe partial class AL : IAL, IAL.Static
         )]
         public static int EaxSetDirect(
             ContextHandle context,
-            Ref<System.Guid> property_set_id,
+            ForTestingOnlyHandle property_set_id,
             uint property_id,
             uint source_id,
             Ref value,
@@ -8349,11 +8348,10 @@ public unsafe partial class AL : IAL, IAL.Static
         )
         {
             fixed (void* __dsl_value = value)
-            fixed (System.Guid* __dsl_property_set_id = property_set_id)
             {
                 return (int)EaxSetDirect(
                     context,
-                    __dsl_property_set_id,
+                    property_set_id,
                     property_id,
                     source_id,
                     __dsl_value,
@@ -16314,7 +16312,7 @@ public unsafe partial class AL : IAL, IAL.Static
         )]
         public int EaxGetDirect(
             ContextHandle context,
-            System.Guid* property_set_id,
+            ForTestingOnlyHandle property_set_id,
             uint property_id,
             uint source_id,
             void* value,
@@ -16332,7 +16330,7 @@ public unsafe partial class AL : IAL, IAL.Static
         )]
         public int EaxGetDirect(
             ContextHandle context,
-            Ref<System.Guid> property_set_id,
+            ForTestingOnlyHandle property_set_id,
             uint property_id,
             uint source_id,
             Ref value,
@@ -16382,7 +16380,7 @@ public unsafe partial class AL : IAL, IAL.Static
         )]
         public int EaxSetDirect(
             ContextHandle context,
-            System.Guid* property_set_id,
+            ForTestingOnlyHandle property_set_id,
             uint property_id,
             uint source_id,
             void* value,
@@ -16400,7 +16398,7 @@ public unsafe partial class AL : IAL, IAL.Static
         )]
         public int EaxSetDirect(
             ContextHandle context,
-            Ref<System.Guid> property_set_id,
+            ForTestingOnlyHandle property_set_id,
             uint property_id,
             uint source_id,
             Ref value,
@@ -25986,7 +25984,7 @@ public unsafe partial class AL : IAL, IAL.Static
         )]
         public static int EaxGetDirect(
             ContextHandle context,
-            System.Guid* property_set_id,
+            ForTestingOnlyHandle property_set_id,
             uint property_id,
             uint source_id,
             void* value,
@@ -26012,7 +26010,7 @@ public unsafe partial class AL : IAL, IAL.Static
         )]
         public static int EaxGetDirect(
             ContextHandle context,
-            Ref<System.Guid> property_set_id,
+            ForTestingOnlyHandle property_set_id,
             uint property_id,
             uint source_id,
             Ref value,
@@ -26020,11 +26018,10 @@ public unsafe partial class AL : IAL, IAL.Static
         )
         {
             fixed (void* __dsl_value = value)
-            fixed (System.Guid* __dsl_property_set_id = property_set_id)
             {
                 return (int)EaxGetDirect(
                     context,
-                    __dsl_property_set_id,
+                    property_set_id,
                     property_id,
                     source_id,
                     __dsl_value,
@@ -26083,7 +26080,7 @@ public unsafe partial class AL : IAL, IAL.Static
         )]
         public static int EaxSetDirect(
             ContextHandle context,
-            System.Guid* property_set_id,
+            ForTestingOnlyHandle property_set_id,
             uint property_id,
             uint source_id,
             void* value,
@@ -26109,7 +26106,7 @@ public unsafe partial class AL : IAL, IAL.Static
         )]
         public static int EaxSetDirect(
             ContextHandle context,
-            Ref<System.Guid> property_set_id,
+            ForTestingOnlyHandle property_set_id,
             uint property_id,
             uint source_id,
             Ref value,
@@ -26117,11 +26114,10 @@ public unsafe partial class AL : IAL, IAL.Static
         )
         {
             fixed (void* __dsl_value = value)
-            fixed (System.Guid* __dsl_property_set_id = property_set_id)
             {
                 return (int)EaxSetDirect(
                     context,
-                    __dsl_property_set_id,
+                    property_set_id,
                     property_id,
                     source_id,
                     __dsl_value,
@@ -42769,14 +42765,21 @@ public unsafe partial class AL : IAL, IAL.Static
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     int IAL.EaxGetDirect(
         ContextHandle context,
-        System.Guid* property_set_id,
+        ForTestingOnlyHandle property_set_id,
         uint property_id,
         uint source_id,
         void* value,
         uint value_size
     ) =>
         (
-            (delegate* unmanaged<ContextHandle, System.Guid*, uint, uint, void*, uint, int>)(
+            (delegate* unmanaged<
+                ContextHandle,
+                ForTestingOnlyHandle,
+                uint,
+                uint,
+                void*,
+                uint,
+                int>)(
                 _slots[294] is not null and var loadedFnPtr
                     ? loadedFnPtr
                     : _slots[294] = nativeContext.LoadFunction("EAXGetDirect", "openal")
@@ -42792,7 +42795,7 @@ public unsafe partial class AL : IAL, IAL.Static
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static int EaxGetDirect(
         ContextHandle context,
-        System.Guid* property_set_id,
+        ForTestingOnlyHandle property_set_id,
         uint property_id,
         uint source_id,
         void* value,
@@ -42816,7 +42819,7 @@ public unsafe partial class AL : IAL, IAL.Static
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     int IAL.EaxGetDirect(
         ContextHandle context,
-        Ref<System.Guid> property_set_id,
+        ForTestingOnlyHandle property_set_id,
         uint property_id,
         uint source_id,
         Ref value,
@@ -42824,12 +42827,11 @@ public unsafe partial class AL : IAL, IAL.Static
     )
     {
         fixed (void* __dsl_value = value)
-        fixed (System.Guid* __dsl_property_set_id = property_set_id)
         {
             return (int)
                 ((IAL)this).EaxGetDirect(
                     context,
-                    __dsl_property_set_id,
+                    property_set_id,
                     property_id,
                     source_id,
                     __dsl_value,
@@ -42847,7 +42849,7 @@ public unsafe partial class AL : IAL, IAL.Static
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static int EaxGetDirect(
         ContextHandle context,
-        Ref<System.Guid> property_set_id,
+        ForTestingOnlyHandle property_set_id,
         uint property_id,
         uint source_id,
         Ref value,
@@ -42936,14 +42938,21 @@ public unsafe partial class AL : IAL, IAL.Static
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     int IAL.EaxSetDirect(
         ContextHandle context,
-        System.Guid* property_set_id,
+        ForTestingOnlyHandle property_set_id,
         uint property_id,
         uint source_id,
         void* value,
         uint value_size
     ) =>
         (
-            (delegate* unmanaged<ContextHandle, System.Guid*, uint, uint, void*, uint, int>)(
+            (delegate* unmanaged<
+                ContextHandle,
+                ForTestingOnlyHandle,
+                uint,
+                uint,
+                void*,
+                uint,
+                int>)(
                 _slots[296] is not null and var loadedFnPtr
                     ? loadedFnPtr
                     : _slots[296] = nativeContext.LoadFunction("EAXSetDirect", "openal")
@@ -42959,7 +42968,7 @@ public unsafe partial class AL : IAL, IAL.Static
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static int EaxSetDirect(
         ContextHandle context,
-        System.Guid* property_set_id,
+        ForTestingOnlyHandle property_set_id,
         uint property_id,
         uint source_id,
         void* value,
@@ -42983,7 +42992,7 @@ public unsafe partial class AL : IAL, IAL.Static
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     int IAL.EaxSetDirect(
         ContextHandle context,
-        Ref<System.Guid> property_set_id,
+        ForTestingOnlyHandle property_set_id,
         uint property_id,
         uint source_id,
         Ref value,
@@ -42991,12 +43000,11 @@ public unsafe partial class AL : IAL, IAL.Static
     )
     {
         fixed (void* __dsl_value = value)
-        fixed (System.Guid* __dsl_property_set_id = property_set_id)
         {
             return (int)
                 ((IAL)this).EaxSetDirect(
                     context,
-                    __dsl_property_set_id,
+                    property_set_id,
                     property_id,
                     source_id,
                     __dsl_value,
@@ -43014,7 +43022,7 @@ public unsafe partial class AL : IAL, IAL.Static
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public static int EaxSetDirect(
         ContextHandle context,
-        Ref<System.Guid> property_set_id,
+        ForTestingOnlyHandle property_set_id,
         uint property_id,
         uint source_id,
         Ref value,
