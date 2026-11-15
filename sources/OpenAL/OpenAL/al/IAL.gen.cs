@@ -6055,7 +6055,7 @@ public unsafe partial interface IAL
         [NativeFunction("openal", EntryPoint = "EAXGetDirect")]
         static abstract int EaxGetDirect(
             ContextHandle context,
-            System.Guid* property_set_id,
+            ForTestingOnlyHandle property_set_id,
             uint property_id,
             uint source_id,
             void* value,
@@ -6070,7 +6070,7 @@ public unsafe partial interface IAL
         [NativeFunction("openal", EntryPoint = "EAXGetDirect")]
         static abstract int EaxGetDirect(
             ContextHandle context,
-            Ref<System.Guid> property_set_id,
+            ForTestingOnlyHandle property_set_id,
             uint property_id,
             uint source_id,
             Ref value,
@@ -6111,7 +6111,7 @@ public unsafe partial interface IAL
         [NativeFunction("openal", EntryPoint = "EAXSetDirect")]
         static abstract int EaxSetDirect(
             ContextHandle context,
-            System.Guid* property_set_id,
+            ForTestingOnlyHandle property_set_id,
             uint property_id,
             uint source_id,
             void* value,
@@ -6126,7 +6126,7 @@ public unsafe partial interface IAL
         [NativeFunction("openal", EntryPoint = "EAXSetDirect")]
         static abstract int EaxSetDirect(
             ContextHandle context,
-            Ref<System.Guid> property_set_id,
+            ForTestingOnlyHandle property_set_id,
             uint property_id,
             uint source_id,
             Ref value,
@@ -11453,7 +11453,7 @@ public unsafe partial interface IAL
     [NativeFunction("openal", EntryPoint = "EAXGetDirect")]
     int EaxGetDirect(
         ContextHandle context,
-        System.Guid* property_set_id,
+        ForTestingOnlyHandle property_set_id,
         uint property_id,
         uint source_id,
         void* value,
@@ -11468,7 +11468,7 @@ public unsafe partial interface IAL
     [NativeFunction("openal", EntryPoint = "EAXGetDirect")]
     int EaxGetDirect(
         ContextHandle context,
-        Ref<System.Guid> property_set_id,
+        ForTestingOnlyHandle property_set_id,
         uint property_id,
         uint source_id,
         Ref value,
@@ -11504,7 +11504,7 @@ public unsafe partial interface IAL
     [NativeFunction("openal", EntryPoint = "EAXSetDirect")]
     int EaxSetDirect(
         ContextHandle context,
-        System.Guid* property_set_id,
+        ForTestingOnlyHandle property_set_id,
         uint property_id,
         uint source_id,
         void* value,
@@ -11519,7 +11519,7 @@ public unsafe partial interface IAL
     [NativeFunction("openal", EntryPoint = "EAXSetDirect")]
     int EaxSetDirect(
         ContextHandle context,
-        Ref<System.Guid> property_set_id,
+        ForTestingOnlyHandle property_set_id,
         uint property_id,
         uint source_id,
         Ref value,
