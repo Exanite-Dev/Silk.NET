@@ -23,6 +23,8 @@ try {
   )
 
   # Inputs
+  Write-Host "Supported runtimes: $supportedRuntimes"
+
   $runtime = ($args.Count -gt 0 -and $args[0]) ? $args[0] : $env:CHOSEN_RUNTIME
   if (-not $runtime) {
     Write-Host "Please choose a runtime by providing it as the first argument or setting the CHOSEN_RUNTIME env var"
@@ -82,11 +84,10 @@ try {
           $docker = "podman"
         }
 
-        # TODO: PowerShell is pinned to `--version "7.6.*"` because of https://github.com/PowerShell/PowerShell/issues/28392
         $name = "silk-native-$PID"
         try {
-          & $docker run --rm --init --name $name --platform linux/amd64 -e SILKDOTNET_DOCKER=1 -e CHOSEN_RUNTIME=$runtime -v "${repoRoot}:/data/repo" debian `
-            bash -c 'apt-get update && apt-get install -y curl libicu-dev && curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s && export DOTNET_ROOT="$HOME/.dotnet" PATH="$HOME/.dotnet:$HOME/.dotnet/tools:$PATH" && dotnet tool install --global PowerShell --version "7.6.*" && /data/repo/sources/SDL/Native/build.ps1'
+          & $docker build -t silkdotnet-builder:latest --platform=linux/amd64 -f $repoRoot/eng/workflows/native/debian/Dockerfile $repoRoot/eng/workflows
+          & $docker run --rm --init --name $name -e SILKDOTNET_DOCKER=1 -e CHOSEN_RUNTIME=$runtime -v "${repoRoot}:/data/repo" silkdotnet-builder:latest bash -c "/data/repo/sources/SDL/Native/build.ps1"
         } finally {
           & $docker rm -f $name
         }
@@ -94,54 +95,12 @@ try {
         exit 0
       }
 
-      # TODO: Probably move basic dependencies to Dockerfile
-      # TODO: Also dedupe from later
-      # TODO: Replicate to OpenAL
-      # Shared dependencies
-      apt-get update
-      apt-get install -y git cmake make ninja-build python3 unzip build-essential pkg-config ninja-build
-
-      # Git
-      git config --global --add safe.directory "*"
-
-      # NDK
-      if ($runtime -like "android*") {
-        apt-get install -y openjdk-17-jdk ant android-sdk-platform-tools-common
-
-        curl -fsSL https://dl.google.com/android/cli/latest/linux_x86_64/install.sh | bash
-        $env:PATH += ":/root/.local/bin"
-        $env:ANDROID_HOME = "/data/android-sdk"
-
-        android sdk list --all
-
-        $androidVersion = android sdk list --all |
-          Where-Object { $_ -match "platforms/android-(?<version>(?<major>[\d]+)(\.(?<minor>[\d]+)))" } |
-          ForEach-Object { @{ id = $matches.0; major = [int]$matches.major; minor = [int]$matches.minor ?? 0; version = $matches.version } } |
-          Sort-Object major, minor |
-          Select-Object -last 1
-
-        $ndkVersion = android sdk list --all |
-          Where-Object { $_ -match "ndk/(?<version>(?<major>[\d]+)(\.(?<minor>[\d]+))?(\.(?<patch>[\d]+)))" } |
-          ForEach-Object { @{ id = $matches.0; major = [int]$matches.major; minor = [int]$matches.minor ?? 0, [int]$matches.patch ?? 0; version = $matches.version } } |
-          Sort-Object major, minor, patch |
-          Select-Object -last 1
-
-        android sdk install $androidVersion.id
-        android sdk install $ndkVersion.id
-
-        $env:ANDROID_NDK_HOME = (Resolve-Path $env:ANDROID_HOME/ndk/*).Path
-      }
-
-      # Zig
-      if ($runtime -like "linux*") {
-        & $repoRoot/eng/native/buildsystem/download-zig.py
-        $env:PATH += ":$((Resolve-Path $repoRoot/eng/native/buildsystem/zig).Path)"
-      }
+      . $repoRoot/eng/workflows/dependencies/initialize-env.ps1
 
       switch ($runtime) {
         "android" {
           # Build
-          & python3 $submodulePath/build-scripts/build-release.py --actions android --root $submodulePath --android-api $androidVersion.version
+          & python3 $submodulePath/build-scripts/build-release.py --actions android --root $submodulePath
           New-Item -ItemType Directory -Force runtimes/android-x86/native, runtimes/android-x64/native, runtimes/android-arm/native, runtimes/android-arm64/native, android
           Copy-Item $submodulePath/install-android/arm64-v8a-install/lib/libSDL3.so runtimes/android-arm64/native
           Copy-Item $submodulePath/install-android/armeabi-v7a-install/lib/libSDL3.so runtimes/android-arm/native

@@ -26,6 +26,8 @@ try {
   )
 
   # Inputs
+  Write-Host "Supported runtimes: $supportedRuntimes"
+
   $runtime = ($args.Count -gt 0 -and $args[0]) ? $args[0] : $env:CHOSEN_RUNTIME
   if (-not $runtime) {
     Write-Host "Please choose a runtime by providing it as the first argument or setting the CHOSEN_RUNTIME env var"
@@ -87,11 +89,10 @@ try {
           $docker = "podman"
         }
 
-        # TODO: PowerShell is pinned to `--version "7.6.*"` because of https://github.com/PowerShell/PowerShell/issues/28392
         $name = "silk-native-$PID"
         try {
-          & $docker run --rm --init --name $name --platform linux/amd64 -e SILKDOTNET_DOCKER=1 -e CHOSEN_RUNTIME=$runtime -v "${repoRoot}:/data" debian `
-            bash -c 'apt-get update && apt-get install -y curl libicu-dev && curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s && export DOTNET_ROOT="$HOME/.dotnet" PATH="$HOME/.dotnet:$HOME/.dotnet/tools:$PATH" && dotnet tool install --global PowerShell --version "7.6.*" && /data/sources/OpenAL/Soft.Native/build.ps1'
+          & $docker build -t silkdotnet-builder:latest --platform=linux/amd64 -f $repoRoot/eng/workflows/native/debian/Dockerfile $repoRoot/eng/workflows
+          & $docker run --rm --init --name $name -e SILKDOTNET_DOCKER=1 -e CHOSEN_RUNTIME=$runtime -v "${repoRoot}:/data/repo" silkdotnet-builder:latest bash -c "/data/repo/sources/OpenAL/Soft.Native/build.ps1"
         } finally {
           & $docker rm -f $name
         }
@@ -99,15 +100,10 @@ try {
         exit 0
       }
 
+      . $repoRoot/eng/workflows/dependencies/initialize-env.ps1
+
       switch ($runtime) {
         "android-arm64" {
-          # Dependencies
-          if ($env:GITHUB_ACTIONS) {
-            # NDK already installed: https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md
-            $sdkmanager = @(Get-ChildItem /usr/local/lib/android/sdk/cmdline-tools/*/bin/sdkmanager | Sort-Object FullName)
-            & $sdkmanager[-1].FullName --install "platforms;android-21"
-          }
-
           # Build
           Remove-Item -Recurse -Force build -ErrorAction Ignore
           New-Item -ItemType Directory build
@@ -123,13 +119,6 @@ try {
         }
 
         "android-arm" {
-          # Dependencies
-          if ($env:GITHUB_ACTIONS) {
-            # NDK already installed: https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md
-            $sdkmanager = @(Get-ChildItem /usr/local/lib/android/sdk/cmdline-tools/*/bin/sdkmanager | Sort-Object FullName)
-            & $sdkmanager[-1].FullName --install "platforms;android-21"
-          }
-
           # Build
           Remove-Item -Recurse -Force build -ErrorAction Ignore
           New-Item -ItemType Directory build
@@ -145,13 +134,6 @@ try {
         }
 
         "android-x64" {
-          # Dependencies
-          if ($env:GITHUB_ACTIONS) {
-            # NDK already installed: https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md
-            $sdkmanager = @(Get-ChildItem /usr/local/lib/android/sdk/cmdline-tools/*/bin/sdkmanager | Sort-Object FullName)
-            & $sdkmanager[-1].FullName --install "platforms;android-21"
-          }
-
           # Build
           Remove-Item -Recurse -Force build -ErrorAction Ignore
           New-Item -ItemType Directory build
@@ -167,13 +149,6 @@ try {
         }
 
         "android-x86" {
-          # Dependencies
-          if ($env:GITHUB_ACTIONS) {
-            # NDK already installed: https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md
-            $sdkmanager = @(Get-ChildItem /usr/local/lib/android/sdk/cmdline-tools/*/bin/sdkmanager | Sort-Object FullName)
-            & $sdkmanager[-1].FullName --install "platforms;android-21"
-          }
-
           # Build
           Remove-Item -Recurse -Force build -ErrorAction Ignore
           New-Item -ItemType Directory build
