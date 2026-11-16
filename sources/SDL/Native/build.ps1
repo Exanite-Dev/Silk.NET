@@ -8,6 +8,19 @@ try {
   # Config
   $repoRoot = Join-Path $PSScriptRoot "../../.."
   $submodulePath = Join-Path $repoRoot "eng/submodules/sdl"
+  $supportedRuntimes = @(
+    "android",
+    "ios",
+    "iossimulator",
+    "linux-arm64",
+    "linux-arm",
+    "linux-x64",
+    "osx",
+    "tvos",
+    "tvossimulator",
+    "win-arm64",
+    "win-x64"
+  )
 
   # Inputs
   $runtime = ($args.Count -gt 0 -and $args[0]) ? $args[0] : $env:CHOSEN_RUNTIME
@@ -17,99 +30,135 @@ try {
   }
 
   Write-Host "Chosen runtime: $runtime"
+  if (-not ($runtime -in $supportedRuntimes)) {
+    Write-Host "Unknown runtime: $runtime"
+    exit 1
+  }
 
-  switch ($runtime) {
-    default {
-      Write-Host "Unknown runtime: $runtime"
-      exit 1
-    }
+  switch ($true) {
+    $IsWindows {
+      $vsPath = & "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe" -latest -products "*" -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
 
-    "android" {
-      # Dependencies
-      $python = "python"
-      if ($env:GITHUB_ACTIONS) {
-        # NDK already installed: https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md
-        $sdkmanager = @(Get-ChildItem /usr/local/lib/android/sdk/cmdline-tools/*/bin/sdkmanager | Sort-Object FullName)
-        & $sdkmanager[-1].FullName --install "platforms;android-19"
-        sudo add-apt-repository ppa:deadsnakes/ppa
-        sudo apt update
-        sudo apt install python3.11 ninja-build
-        $python = "python3.11"
-      }
-
-      # Build
-      & $python $submodulePath/build-scripts/build-release.py --actions android --root $submodulePath
-      New-Item -ItemType Directory -Force runtimes/android-x86/native, runtimes/android-x64/native, runtimes/android-arm/native, runtimes/android-arm64/native, android
-      Copy-Item $submodulePath/install-android/arm64-v8a-install/lib/libSDL3.so runtimes/android-arm64/native
-      Copy-Item $submodulePath/install-android/armeabi-v7a-install/lib/libSDL3.so runtimes/android-arm/native
-      Copy-Item $submodulePath/install-android/x86-install/lib/libSDL3.so runtimes/android-x86/native
-      Copy-Item $submodulePath/install-android/x86_64-install/lib/libSDL3.so runtimes/android-x64/native
-      $jars = @(Get-ChildItem $submodulePath/install-android/armeabi-v7a-install/share/java/SDL3/SDL3-*.jar | Sort-Object FullName)
-      Copy-Item $jars[1].FullName android/SDL3.jar
-      Copy-Item "$(Split-Path -Parent $jars[1].FullName)/proguard.txt" android/proguard.txt
-    }
-
-    "ios" {
-      # Build
-      Remove-Item -Recurse -Force build -ErrorAction Ignore
-      New-Item -ItemType Directory build
-      Push-Location build
-      try {
-        cmake $submodulePath "-DCMAKE_SYSTEM_NAME=iOS" "-DCMAKE_OSX_SYSROOT=iphoneos" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=9.0" "-DCMAKE_BUILD_TYPE=Release" "-DSDL_STATIC=ON" "-DSDL_TEST_LIBRARY=OFF"
-        cmake --build . --parallel
-      } finally {
-        Pop-Location
-      }
-      New-Item -ItemType Directory -Force runtimes/ios/native
-      Copy-Item build/libSDL3.a runtimes/ios/native
-    }
-
-    "iossimulator" {
-      # Build
-      Remove-Item -Recurse -Force build -ErrorAction Ignore
-      New-Item -ItemType Directory build
-      Push-Location build
-      try {
-        cmake $submodulePath "-DCMAKE_SYSTEM_NAME=iOS" "-DCMAKE_OSX_SYSROOT=iphonesimulator" "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=9.0" "-DCMAKE_BUILD_TYPE=Release" "-DSDL_STATIC=ON" "-DSDL_TEST_LIBRARY=OFF"
-        cmake --build . --parallel
-      } finally {
-        Pop-Location
-      }
-      New-Item -ItemType Directory -Force runtimes/iossimulator/native
-      Copy-Item build/libSDL3.a runtimes/iossimulator/native
-    }
-
-    "linux-arm64" {
-      # Dependencies
-      if ($env:GITHUB_ACTIONS) {
-        if (-not $env:SILKDOTNET_DOCKER) {
-          # Enter Debian container for multiarch packages
-          $docker = "docker"
-          if (Get-Command podman -ErrorAction Ignore) {
-            $docker = "podman"
-          }
-
-          # TODO: PowerShell is pinned to `--version "7.6.*"` because of https://github.com/PowerShell/PowerShell/issues/28392
-          $name = "silk-native-$PID"
+      switch ($runtime) {
+        "win-arm64" {
+          # Build
+          & "$vsPath/Common7/Tools/Launch-VsDevShell.ps1" -HostArch amd64 -Arch arm64 -SkipAutomaticLocation
+          Remove-Item -Recurse -Force build -ErrorAction Ignore
+          New-Item -ItemType Directory build
+          Push-Location build
           try {
-            & $docker run --rm --init --name $name --platform linux/amd64 -e SILKDOTNET_DOCKER=1 -e GITHUB_ACTIONS=1 -v "${repoRoot}:/data" debian `
-              bash -c 'apt-get update && apt-get install -y curl libicu-dev && curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s && export DOTNET_ROOT="$HOME/.dotnet" PATH="$HOME/.dotnet:$HOME/.dotnet/tools:$PATH" && dotnet tool install --global PowerShell --version "7.6.*" && /data/sources/SDL/Native/build.ps1 linux-arm64'
+            cmake $submodulePath -G Ninja "-DCMAKE_BUILD_TYPE=Release" "-DSDL_TEST_LIBRARY=OFF"
+            cmake --build . --parallel
           } finally {
-            & $docker rm -f $name
+            Pop-Location
           }
-          exit 0
-        } else {
-          apt-get update
-          apt-get install -y python3
-          & $repoRoot/eng/native/buildsystem/download-zig.py
-          $env:PATH += ":$((Resolve-Path $repoRoot/eng/native/buildsystem/zig).Path)"
+          New-Item -ItemType Directory -Force runtimes/win-arm64/native
+          Copy-Item build/SDL3.dll runtimes/win-arm64/native
+        }
 
-          # Dependency list is from https://github.com/libsdl-org/SDL/blob/main/docs/README-linux.md#build-dependencies
+        "win-x64" {
+          # Build
+          & "$vsPath/Common7/Tools/Launch-VsDevShell.ps1" -HostArch amd64 -Arch amd64 -SkipAutomaticLocation
+          Remove-Item -Recurse -Force build -ErrorAction Ignore
+          New-Item -ItemType Directory build
+          Push-Location build
+          try {
+            cmake $submodulePath -G Ninja "-DCMAKE_BUILD_TYPE=Release" "-DSDL_TEST_LIBRARY=OFF"
+            cmake --build . --parallel
+          } finally {
+            Pop-Location
+          }
+          New-Item -ItemType Directory -Force runtimes/win-x64/native
+          Copy-Item build/SDL3.dll runtimes/win-x64/native
+        }
+      }
+    }
+
+    $IsLinux {
+      # Enter Debian container
+      if (-not $env:SILKDOTNET_DOCKER) {
+        $docker = "docker"
+        if (Get-Command podman -ErrorAction Ignore) {
+          $docker = "podman"
+        }
+
+        # TODO: PowerShell is pinned to `--version "7.6.*"` because of https://github.com/PowerShell/PowerShell/issues/28392
+        $name = "silk-native-$PID"
+        try {
+          & $docker run --rm --init --name $name --platform linux/amd64 -e SILKDOTNET_DOCKER=1 -e CHOSEN_RUNTIME=$runtime -v "${repoRoot}:/data/repo" debian `
+            bash -c 'apt-get update && apt-get install -y curl libicu-dev && curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s && export DOTNET_ROOT="$HOME/.dotnet" PATH="$HOME/.dotnet:$HOME/.dotnet/tools:$PATH" && dotnet tool install --global PowerShell --version "7.6.*" && /data/repo/sources/SDL/Native/build.ps1'
+        } finally {
+          & $docker rm -f $name
+        }
+
+        exit 0
+      }
+
+      # TODO: Probably move basic dependencies to Dockerfile
+      # TODO: Also dedupe from later
+      # TODO: Replicate to OpenAL
+      # Shared dependencies
+      apt-get update
+      apt-get install -y git cmake make ninja-build python3 unzip build-essential pkg-config ninja-build
+
+      # Git
+      git config --global --add safe.directory "*"
+
+      # NDK
+      if ($runtime -like "android*") {
+        apt-get install -y default-jdk-headless
+
+        curl -fsSL https://dl.google.com/android/cli/latest/linux_x86_64/install.sh | bash
+        $env:PATH += ":/root/.local/bin"
+        $env:ANDROID_HOME = "/data/android-sdk"
+
+        android sdk list --all
+
+        $androidVersion = android sdk list --all |
+          Where-Object { $_ -match "platforms/android-(?<version>(?<major>[\d]+)(\.(?<minor>[\d]+)))" } |
+          ForEach-Object { @{ id = $matches.0; major = [int]$matches.major; minor = [int]$matches.minor ?? 0; version = $matches.version } } |
+          Sort-Object major, minor |
+          Select-Object -last 1
+
+        $ndkVersion = android sdk list --all |
+          Where-Object { $_ -match "ndk/(?<version>(?<major>[\d]+)(\.(?<minor>[\d]+))?(\.(?<patch>[\d]+)))" } |
+          ForEach-Object { @{ id = $matches.0; major = [int]$matches.major; minor = [int]$matches.minor ?? 0, [int]$matches.patch ?? 0; version = $matches.version } } |
+          Sort-Object major, minor, patch |
+          Select-Object -last 1
+
+        android sdk install $androidVersion.id
+        android sdk install $ndkVersion.id
+
+        $env:ANDROID_NDK_HOME = (Resolve-Path $env:ANDROID_HOME/ndk/*).Path
+      }
+
+      # Zig
+      if ($runtime -like "linux*") {
+        & $repoRoot/eng/native/buildsystem/download-zig.py
+        $env:PATH += ":$((Resolve-Path $repoRoot/eng/native/buildsystem/zig).Path)"
+      }
+
+      switch ($runtime) {
+        "android" {
+          # Build
+          & python3 $submodulePath/build-scripts/build-release.py --actions android --root $submodulePath
+          New-Item -ItemType Directory -Force runtimes/android-x86/native, runtimes/android-x64/native, runtimes/android-arm/native, runtimes/android-arm64/native, android
+          Copy-Item $submodulePath/install-android/arm64-v8a-install/lib/libSDL3.so runtimes/android-arm64/native
+          Copy-Item $submodulePath/install-android/armeabi-v7a-install/lib/libSDL3.so runtimes/android-arm/native
+          Copy-Item $submodulePath/install-android/x86-install/lib/libSDL3.so runtimes/android-x86/native
+          Copy-Item $submodulePath/install-android/x86_64-install/lib/libSDL3.so runtimes/android-x64/native
+          $jars = @(Get-ChildItem $submodulePath/install-android/armeabi-v7a-install/share/java/SDL3/SDL3-*.jar | Sort-Object FullName)
+          Copy-Item $jars[1].FullName android/SDL3.jar
+          Copy-Item "$(Split-Path -Parent $jars[1].FullName)/proguard.txt" android/proguard.txt
+        }
+
+        "linux-arm64" {
+          # Dependencies
+          # From https://github.com/libsdl-org/SDL/blob/main/docs/README-linux.md#build-dependencies
           dpkg --add-architecture arm64
           apt-get update
           apt-get install -y `
-            git cmake make build-essential `
-            pkg-config ninja-build gnome-desktop-testing `
+            gnome-desktop-testing `
             libglib2.0-dev-bin `
             libasound2-dev:arm64 libpulse-dev:arm64 `
             libaudio-dev:arm64 libfribidi-dev:arm64 libjack-dev:arm64 libsndio-dev:arm64 libx11-dev:arm64 libxext-dev:arm64 `
@@ -117,54 +166,28 @@ try {
             libxkbcommon-dev:arm64 libdrm-dev:arm64 libgbm-dev:arm64 libgl1-mesa-dev:arm64 libgles2-mesa-dev:arm64 `
             libegl1-mesa-dev:arm64 libdbus-1-dev:arm64 libibus-1.0-dev:arm64 libudev-dev:arm64 libthai-dev:arm64 `
             libpipewire-0.3-dev:arm64 libwayland-dev:arm64 libdecor-0-dev:arm64 liburing-dev:arm64
-        }
-      }
 
-      # Build
-      Remove-Item -Recurse -Force build -ErrorAction Ignore
-      New-Item -ItemType Directory build
-      Push-Location build
-      try {
-        cmake $submodulePath "-DCMAKE_BUILD_TYPE=Release" "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/zig-toolchain-aarch64-linux-gnu.2.17.cmake" "-DSDL_TEST_LIBRARY=OFF"
-        cmake --build . --parallel
-      } finally {
-        Pop-Location
-      }
-      New-Item -ItemType Directory -Force runtimes/linux-arm64/native
-      Copy-Item build/libSDL3.so runtimes/linux-arm64/native
-    }
-
-    "linux-arm" {
-      # Dependencies
-      if ($env:GITHUB_ACTIONS) {
-        if (-not $env:SILKDOTNET_DOCKER) {
-          # Enter Debian container for multiarch packages
-          $docker = "docker"
-          if (Get-Command podman -ErrorAction Ignore) {
-            $docker = "podman"
-          }
-
-          # TODO: PowerShell is pinned to `--version "7.6.*"` because of https://github.com/PowerShell/PowerShell/issues/28392
-          $name = "silk-native-$PID"
+          # Build
+          Remove-Item -Recurse -Force build -ErrorAction Ignore
+          New-Item -ItemType Directory build
+          Push-Location build
           try {
-            & $docker run --rm --init --name $name --platform linux/amd64 -e SILKDOTNET_DOCKER=1 -e GITHUB_ACTIONS=1 -v "${repoRoot}:/data" debian `
-              bash -c 'apt-get update && apt-get install -y curl libicu-dev && curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s && export DOTNET_ROOT="$HOME/.dotnet" PATH="$HOME/.dotnet:$HOME/.dotnet/tools:$PATH" && dotnet tool install --global PowerShell --version "7.6.*" && /data/sources/SDL/Native/build.ps1 linux-arm'
+            cmake $submodulePath "-DCMAKE_BUILD_TYPE=Release" "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/zig-toolchain-aarch64-linux-gnu.2.17.cmake" "-DSDL_TEST_LIBRARY=OFF"
+            cmake --build . --parallel
           } finally {
-            & $docker rm -f $name
+            Pop-Location
           }
-          exit 0
-        } else {
-          apt-get update
-          apt-get install -y python3
-          & $repoRoot/eng/native/buildsystem/download-zig.py
-          $env:PATH += ":$((Resolve-Path $repoRoot/eng/native/buildsystem/zig).Path)"
+          New-Item -ItemType Directory -Force runtimes/linux-arm64/native
+          Copy-Item build/libSDL3.so runtimes/linux-arm64/native
+        }
 
-          # Dependency list is from https://github.com/libsdl-org/SDL/blob/main/docs/README-linux.md#build-dependencies
+        "linux-arm" {
+          # Dependencies
+          # From https://github.com/libsdl-org/SDL/blob/main/docs/README-linux.md#build-dependencies
           dpkg --add-architecture armhf
           apt-get update
           apt-get install -y `
-            git cmake make build-essential `
-            pkg-config ninja-build gnome-desktop-testing `
+            gnome-desktop-testing `
             libglib2.0-dev-bin `
             libasound2-dev:armhf libpulse-dev:armhf `
             libaudio-dev:armhf libfribidi-dev:armhf libjack-dev:armhf libsndio-dev:armhf libx11-dev:armhf libxext-dev:armhf `
@@ -172,54 +195,28 @@ try {
             libxkbcommon-dev:armhf libdrm-dev:armhf libgbm-dev:armhf libgl1-mesa-dev:armhf libgles2-mesa-dev:armhf `
             libegl1-mesa-dev:armhf libdbus-1-dev:armhf libibus-1.0-dev:armhf libudev-dev:armhf libthai-dev:armhf `
             libpipewire-0.3-dev:armhf libwayland-dev:armhf libdecor-0-dev:armhf liburing-dev:armhf
-        }
-      }
 
-      # Build
-      Remove-Item -Recurse -Force build -ErrorAction Ignore
-      New-Item -ItemType Directory build
-      Push-Location build
-      try {
-        cmake $submodulePath "-DCMAKE_BUILD_TYPE=Release" "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/zig-toolchain-arm-linux-gnueabihf.2.34.cmake" "-DSDL_TEST_LIBRARY=OFF"
-        cmake --build . --parallel
-      } finally {
-        Pop-Location
-      }
-      New-Item -ItemType Directory -Force runtimes/linux-arm/native
-      Copy-Item build/libSDL3.so runtimes/linux-arm/native
-    }
-
-    "linux-x64" {
-      # Dependencies
-      if ($env:GITHUB_ACTIONS) {
-        if (-not $env:SILKDOTNET_DOCKER) {
-          # Enter Debian container for multiarch packages
-          $docker = "docker"
-          if (Get-Command podman -ErrorAction Ignore) {
-            $docker = "podman"
-          }
-
-          # TODO: PowerShell is pinned to `--version "7.6.*"` because of https://github.com/PowerShell/PowerShell/issues/28392
-          $name = "silk-native-$PID"
+          # Build
+          Remove-Item -Recurse -Force build -ErrorAction Ignore
+          New-Item -ItemType Directory build
+          Push-Location build
           try {
-            & $docker run --rm --init --name $name --platform linux/amd64 -e SILKDOTNET_DOCKER=1 -e GITHUB_ACTIONS=1 -v "${repoRoot}:/data" debian `
-              bash -c 'apt-get update && apt-get install -y curl libicu-dev && curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s && export DOTNET_ROOT="$HOME/.dotnet" PATH="$HOME/.dotnet:$HOME/.dotnet/tools:$PATH" && dotnet tool install --global PowerShell --version "7.6.*" && /data/sources/SDL/Native/build.ps1 linux-x64'
+            cmake $submodulePath "-DCMAKE_BUILD_TYPE=Release" "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/zig-toolchain-arm-linux-gnueabihf.2.34.cmake" "-DSDL_TEST_LIBRARY=OFF"
+            cmake --build . --parallel
           } finally {
-            & $docker rm -f $name
+            Pop-Location
           }
-          exit 0
-        } else {
-          apt-get update
-          apt-get install -y python3
-          & $repoRoot/eng/native/buildsystem/download-zig.py
-          $env:PATH += ":$((Resolve-Path $repoRoot/eng/native/buildsystem/zig).Path)"
+          New-Item -ItemType Directory -Force runtimes/linux-arm/native
+          Copy-Item build/libSDL3.so runtimes/linux-arm/native
+        }
 
-          # Dependency list is from https://github.com/libsdl-org/SDL/blob/main/docs/README-linux.md#build-dependencies
+        "linux-x64" {
+          # Dependencies
+          # From https://github.com/libsdl-org/SDL/blob/main/docs/README-linux.md#build-dependencies
           dpkg --add-architecture amd64
           apt-get update
           apt-get install -y `
-            git cmake make build-essential `
-            pkg-config ninja-build gnome-desktop-testing `
+            gnome-desktop-testing `
             libglib2.0-dev-bin `
             libasound2-dev:amd64 libpulse-dev:amd64 `
             libaudio-dev:amd64 libfribidi-dev:amd64 libjack-dev:amd64 libsndio-dev:amd64 libx11-dev:amd64 libxext-dev:amd64 `
@@ -227,100 +224,100 @@ try {
             libxkbcommon-dev:amd64 libdrm-dev:amd64 libgbm-dev:amd64 libgl1-mesa-dev:amd64 libgles2-mesa-dev:amd64 `
             libegl1-mesa-dev:amd64 libdbus-1-dev:amd64 libibus-1.0-dev:amd64 libudev-dev:amd64 libthai-dev:amd64 `
             libpipewire-0.3-dev:amd64 libwayland-dev:amd64 libdecor-0-dev:amd64 liburing-dev:amd64
+
+          # Build
+          Remove-Item -Recurse -Force build -ErrorAction Ignore
+          New-Item -ItemType Directory build
+          Push-Location build
+          try {
+            cmake $submodulePath "-DCMAKE_BUILD_TYPE=Release" "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/zig-toolchain-x86_64-linux-gnu.2.17.cmake" "-DSDL_TEST_LIBRARY=OFF"
+            cmake --build . --parallel
+          } finally {
+            Pop-Location
+          }
+          New-Item -ItemType Directory -Force runtimes/linux-x64/native
+          Copy-Item build/libSDL3.so runtimes/linux-x64/native
         }
       }
-
-      # Build
-      Remove-Item -Recurse -Force build -ErrorAction Ignore
-      New-Item -ItemType Directory build
-      Push-Location build
-      try {
-        cmake $submodulePath "-DCMAKE_BUILD_TYPE=Release" "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/zig-toolchain-x86_64-linux-gnu.2.17.cmake" "-DSDL_TEST_LIBRARY=OFF"
-        cmake --build . --parallel
-      } finally {
-        Pop-Location
-      }
-      New-Item -ItemType Directory -Force runtimes/linux-x64/native
-      Copy-Item build/libSDL3.so runtimes/linux-x64/native
     }
 
-    "osx" {
-      # Build
-      Remove-Item -Recurse -Force build -ErrorAction Ignore
-      New-Item -ItemType Directory build
-      Push-Location build
-      try {
-        cmake $submodulePath "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=10.11" "-DCMAKE_BUILD_TYPE=Release" "-DSDL_TEST_LIBRARY=OFF"
-        cmake --build . --parallel
-      } finally {
-        Pop-Location
-      }
-      New-Item -ItemType Directory -Force runtimes/osx/native
-      Copy-Item build/libSDL3.dylib runtimes/osx/native
-    }
+    $IsMacOS {
+      switch ($runtime) {
+        "ios" {
+          # Build
+          Remove-Item -Recurse -Force build -ErrorAction Ignore
+          New-Item -ItemType Directory build
+          Push-Location build
+          try {
+            cmake $submodulePath "-DCMAKE_SYSTEM_NAME=iOS" "-DCMAKE_OSX_SYSROOT=iphoneos" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=9.0" "-DCMAKE_BUILD_TYPE=Release" "-DSDL_STATIC=ON" "-DSDL_TEST_LIBRARY=OFF"
+            cmake --build . --parallel
+          } finally {
+            Pop-Location
+          }
+          New-Item -ItemType Directory -Force runtimes/ios/native
+          Copy-Item build/libSDL3.a runtimes/ios/native
+        }
 
-    "tvos" {
-      # Build
-      Remove-Item -Recurse -Force build -ErrorAction Ignore
-      New-Item -ItemType Directory build
-      Push-Location build
-      try {
-        cmake $submodulePath "-DCMAKE_SYSTEM_NAME=tvOS" "-DCMAKE_OSX_SYSROOT=appletvos" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=9.0" "-DCMAKE_BUILD_TYPE=Release" "-DSDL_STATIC=ON" "-DSDL_TEST_LIBRARY=OFF"
-        cmake --build . --parallel
-      } finally {
-        Pop-Location
-      }
-      New-Item -ItemType Directory -Force runtimes/tvos/native
-      Copy-Item build/libSDL3.a runtimes/tvos/native
-    }
+        "iossimulator" {
+          # Build
+          Remove-Item -Recurse -Force build -ErrorAction Ignore
+          New-Item -ItemType Directory build
+          Push-Location build
+          try {
+            cmake $submodulePath "-DCMAKE_SYSTEM_NAME=iOS" "-DCMAKE_OSX_SYSROOT=iphonesimulator" "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=9.0" "-DCMAKE_BUILD_TYPE=Release" "-DSDL_STATIC=ON" "-DSDL_TEST_LIBRARY=OFF"
+            cmake --build . --parallel
+          } finally {
+            Pop-Location
+          }
+          New-Item -ItemType Directory -Force runtimes/iossimulator/native
+          Copy-Item build/libSDL3.a runtimes/iossimulator/native
+        }
 
-    "tvossimulator" {
-      # Build
-      Remove-Item -Recurse -Force build -ErrorAction Ignore
-      New-Item -ItemType Directory build
-      Push-Location build
-      try {
-        cmake $submodulePath "-DCMAKE_SYSTEM_NAME=tvOS" "-DCMAKE_OSX_SYSROOT=appletvsimulator" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=9.0" "-DCMAKE_BUILD_TYPE=Release" "-DSDL_STATIC=ON" "-DSDL_TEST_LIBRARY=OFF"
-        cmake --build . --parallel
-      } finally {
-        Pop-Location
-      }
-      New-Item -ItemType Directory -Force runtimes/tvossimulator/native
-      Copy-Item build/libSDL3.a runtimes/tvossimulator/native
-    }
+        "osx" {
+          # Build
+          Remove-Item -Recurse -Force build -ErrorAction Ignore
+          New-Item -ItemType Directory build
+          Push-Location build
+          try {
+            cmake $submodulePath "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=10.11" "-DCMAKE_BUILD_TYPE=Release" "-DSDL_TEST_LIBRARY=OFF"
+            cmake --build . --parallel
+          } finally {
+            Pop-Location
+          }
+          New-Item -ItemType Directory -Force runtimes/osx/native
+          Copy-Item build/libSDL3.dylib runtimes/osx/native
+        }
 
-    "win-arm64" {
-      # Build
-      $vsPath = & "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe" -latest -products "*" -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-      & "$vsPath/Common7/Tools/Launch-VsDevShell.ps1" -HostArch amd64 -Arch arm64 -SkipAutomaticLocation
-      Remove-Item -Recurse -Force build -ErrorAction Ignore
-      New-Item -ItemType Directory build
-      Push-Location build
-      try {
-        cmake $submodulePath -G Ninja "-DCMAKE_BUILD_TYPE=Release" "-DSDL_TEST_LIBRARY=OFF"
-        cmake --build . --parallel
-      } finally {
-        Pop-Location
-      }
-      New-Item -ItemType Directory -Force runtimes/win-arm64/native
-      Copy-Item build/SDL3.dll runtimes/win-arm64/native
-    }
+        "tvos" {
+          # Build
+          Remove-Item -Recurse -Force build -ErrorAction Ignore
+          New-Item -ItemType Directory build
+          Push-Location build
+          try {
+            cmake $submodulePath "-DCMAKE_SYSTEM_NAME=tvOS" "-DCMAKE_OSX_SYSROOT=appletvos" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=9.0" "-DCMAKE_BUILD_TYPE=Release" "-DSDL_STATIC=ON" "-DSDL_TEST_LIBRARY=OFF"
+            cmake --build . --parallel
+          } finally {
+            Pop-Location
+          }
+          New-Item -ItemType Directory -Force runtimes/tvos/native
+          Copy-Item build/libSDL3.a runtimes/tvos/native
+        }
 
-    "win-x64" {
-      # Build
-      $vsPath = & "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe" -latest -products "*" -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-      & "$vsPath/Common7/Tools/Launch-VsDevShell.ps1" -HostArch amd64 -Arch amd64 -SkipAutomaticLocation
-      Remove-Item -Recurse -Force build -ErrorAction Ignore
-      New-Item -ItemType Directory build
-      Push-Location build
-      try {
-        cmake $submodulePath -G Ninja "-DCMAKE_BUILD_TYPE=Release" "-DSDL_TEST_LIBRARY=OFF"
-        cmake --build . --parallel
-      } finally {
-        Pop-Location
+        "tvossimulator" {
+          # Build
+          Remove-Item -Recurse -Force build -ErrorAction Ignore
+          New-Item -ItemType Directory build
+          Push-Location build
+          try {
+            cmake $submodulePath "-DCMAKE_SYSTEM_NAME=tvOS" "-DCMAKE_OSX_SYSROOT=appletvsimulator" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=9.0" "-DCMAKE_BUILD_TYPE=Release" "-DSDL_STATIC=ON" "-DSDL_TEST_LIBRARY=OFF"
+            cmake --build . --parallel
+          } finally {
+            Pop-Location
+          }
+          New-Item -ItemType Directory -Force runtimes/tvossimulator/native
+          Copy-Item build/libSDL3.a runtimes/tvossimulator/native
+        }
       }
-      New-Item -ItemType Directory -Force runtimes/win-x64/native
-      Copy-Item build/SDL3.dll runtimes/win-x64/native
     }
   }
 } finally {
