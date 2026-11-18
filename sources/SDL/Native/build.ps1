@@ -47,13 +47,8 @@ try {
           & "$vsPath/Common7/Tools/Launch-VsDevShell.ps1" -HostArch amd64 -Arch arm64 -SkipAutomaticLocation
           Remove-Item -Recurse -Force build -ErrorAction Ignore
           New-Item -ItemType Directory build
-          Push-Location build
-          try {
-            cmake $submodulePath -G Ninja "-DCMAKE_BUILD_TYPE=Release" "-DSDL_TEST_LIBRARY=OFF"
-            cmake --build . --parallel
-          } finally {
-            Pop-Location
-          }
+          cmake $submodulePath -B build -G Ninja "-DCMAKE_BUILD_TYPE=Release" "-DSDL_TEST_LIBRARY=OFF"
+          cmake --build build --parallel
           New-Item -ItemType Directory -Force runtimes/win-arm64/native
           Copy-Item build/SDL3.dll runtimes/win-arm64/native
         }
@@ -63,13 +58,8 @@ try {
           & "$vsPath/Common7/Tools/Launch-VsDevShell.ps1" -HostArch amd64 -Arch amd64 -SkipAutomaticLocation
           Remove-Item -Recurse -Force build -ErrorAction Ignore
           New-Item -ItemType Directory build
-          Push-Location build
-          try {
-            cmake $submodulePath -G Ninja "-DCMAKE_BUILD_TYPE=Release" "-DSDL_TEST_LIBRARY=OFF"
-            cmake --build . --parallel
-          } finally {
-            Pop-Location
-          }
+          cmake $submodulePath -B build -G Ninja "-DCMAKE_BUILD_TYPE=Release" "-DSDL_TEST_LIBRARY=OFF"
+          cmake --build build --parallel
           New-Item -ItemType Directory -Force runtimes/win-x64/native
           Copy-Item build/SDL3.dll runtimes/win-x64/native
         }
@@ -97,6 +87,32 @@ try {
 
       . $repoRoot/eng/workflows/dependencies/initialize-env.ps1
 
+      if ($runtime -like "linux*") {
+        $arch = switch ($runtime) {
+          "linux-arm64" { "arm64" }
+          "linux-arm" { "armhf" }
+          "linux-x64" { "amd64" }
+          default {
+            Write-Host "Unsupported runtime: $runtime"
+            exit 1
+          }
+        }
+
+        # Dependencies
+        # From https://github.com/libsdl-org/SDL/blob/main/docs/README-linux.md#build-dependencies
+        dpkg --add-architecture $arch
+        apt-get update
+        apt-get install -y `
+          gnome-desktop-testing `
+          libglib2.0-dev-bin `
+          libasound2-dev:$arch libpulse-dev:$arch `
+          libaudio-dev:$arch libfribidi-dev:$arch libjack-dev:$arch libsndio-dev:$arch libx11-dev:$arch libxext-dev:$arch `
+          libxrandr-dev:$arch libxcursor-dev:$arch libxfixes-dev:$arch libxi-dev:$arch libxss-dev:$arch libxtst-dev:$arch `
+          libxkbcommon-dev:$arch libdrm-dev:$arch libgbm-dev:$arch libgl1-mesa-dev:$arch libgles2-mesa-dev:$arch `
+          libegl1-mesa-dev:$arch libdbus-1-dev:$arch libibus-1.0-dev:$arch libudev-dev:$arch libthai-dev:$arch `
+          libpipewire-0.3-dev:$arch libwayland-dev:$arch libdecor-0-dev:$arch liburing-dev:$arch
+      }
+
       switch ($runtime) {
         "android" {
           # Build
@@ -112,88 +128,31 @@ try {
         }
 
         "linux-arm64" {
-          # Dependencies
-          # From https://github.com/libsdl-org/SDL/blob/main/docs/README-linux.md#build-dependencies
-          dpkg --add-architecture arm64
-          apt-get update
-          apt-get install -y `
-            gnome-desktop-testing `
-            libglib2.0-dev-bin `
-            libasound2-dev:arm64 libpulse-dev:arm64 `
-            libaudio-dev:arm64 libfribidi-dev:arm64 libjack-dev:arm64 libsndio-dev:arm64 libx11-dev:arm64 libxext-dev:arm64 `
-            libxrandr-dev:arm64 libxcursor-dev:arm64 libxfixes-dev:arm64 libxi-dev:arm64 libxss-dev:arm64 libxtst-dev:arm64 `
-            libxkbcommon-dev:arm64 libdrm-dev:arm64 libgbm-dev:arm64 libgl1-mesa-dev:arm64 libgles2-mesa-dev:arm64 `
-            libegl1-mesa-dev:arm64 libdbus-1-dev:arm64 libibus-1.0-dev:arm64 libudev-dev:arm64 libthai-dev:arm64 `
-            libpipewire-0.3-dev:arm64 libwayland-dev:arm64 libdecor-0-dev:arm64 liburing-dev:arm64
-
           # Build
           Remove-Item -Recurse -Force build -ErrorAction Ignore
           New-Item -ItemType Directory build
-          Push-Location build
-          try {
-            cmake $submodulePath "-DCMAKE_BUILD_TYPE=Release" "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/zig-toolchain-aarch64-linux-gnu.2.17.cmake" "-DSDL_TEST_LIBRARY=OFF"
-            cmake --build . --parallel
-          } finally {
-            Pop-Location
-          }
+          cmake $submodulePath -B build "-DCMAKE_BUILD_TYPE=Release" "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/zig-toolchain-aarch64-linux-gnu.2.17.cmake" "-DSDL_TEST_LIBRARY=OFF"
+          cmake --build build --parallel
           New-Item -ItemType Directory -Force runtimes/linux-arm64/native
           Copy-Item build/libSDL3.so runtimes/linux-arm64/native
         }
 
         "linux-arm" {
-          # Dependencies
-          # From https://github.com/libsdl-org/SDL/blob/main/docs/README-linux.md#build-dependencies
-          dpkg --add-architecture armhf
-          apt-get update
-          apt-get install -y `
-            gnome-desktop-testing `
-            libglib2.0-dev-bin `
-            libasound2-dev:armhf libpulse-dev:armhf `
-            libaudio-dev:armhf libfribidi-dev:armhf libjack-dev:armhf libsndio-dev:armhf libx11-dev:armhf libxext-dev:armhf `
-            libxrandr-dev:armhf libxcursor-dev:armhf libxfixes-dev:armhf libxi-dev:armhf libxss-dev:armhf libxtst-dev:armhf `
-            libxkbcommon-dev:armhf libdrm-dev:armhf libgbm-dev:armhf libgl1-mesa-dev:armhf libgles2-mesa-dev:armhf `
-            libegl1-mesa-dev:armhf libdbus-1-dev:armhf libibus-1.0-dev:armhf libudev-dev:armhf libthai-dev:armhf `
-            libpipewire-0.3-dev:armhf libwayland-dev:armhf libdecor-0-dev:armhf liburing-dev:armhf
-
           # Build
           Remove-Item -Recurse -Force build -ErrorAction Ignore
           New-Item -ItemType Directory build
-          Push-Location build
-          try {
-            cmake $submodulePath "-DCMAKE_BUILD_TYPE=Release" "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/zig-toolchain-arm-linux-gnueabihf.2.34.cmake" "-DSDL_TEST_LIBRARY=OFF"
-            cmake --build . --parallel
-          } finally {
-            Pop-Location
-          }
+          cmake $submodulePath -B build "-DCMAKE_BUILD_TYPE=Release" "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/zig-toolchain-arm-linux-gnueabihf.2.34.cmake" "-DSDL_TEST_LIBRARY=OFF"
+          cmake --build build --parallel
           New-Item -ItemType Directory -Force runtimes/linux-arm/native
           Copy-Item build/libSDL3.so runtimes/linux-arm/native
         }
 
         "linux-x64" {
-          # Dependencies
-          # From https://github.com/libsdl-org/SDL/blob/main/docs/README-linux.md#build-dependencies
-          dpkg --add-architecture amd64
-          apt-get update
-          apt-get install -y `
-            gnome-desktop-testing `
-            libglib2.0-dev-bin `
-            libasound2-dev:amd64 libpulse-dev:amd64 `
-            libaudio-dev:amd64 libfribidi-dev:amd64 libjack-dev:amd64 libsndio-dev:amd64 libx11-dev:amd64 libxext-dev:amd64 `
-            libxrandr-dev:amd64 libxcursor-dev:amd64 libxfixes-dev:amd64 libxi-dev:amd64 libxss-dev:amd64 libxtst-dev:amd64 `
-            libxkbcommon-dev:amd64 libdrm-dev:amd64 libgbm-dev:amd64 libgl1-mesa-dev:amd64 libgles2-mesa-dev:amd64 `
-            libegl1-mesa-dev:amd64 libdbus-1-dev:amd64 libibus-1.0-dev:amd64 libudev-dev:amd64 libthai-dev:amd64 `
-            libpipewire-0.3-dev:amd64 libwayland-dev:amd64 libdecor-0-dev:amd64 liburing-dev:amd64
-
           # Build
           Remove-Item -Recurse -Force build -ErrorAction Ignore
           New-Item -ItemType Directory build
-          Push-Location build
-          try {
-            cmake $submodulePath "-DCMAKE_BUILD_TYPE=Release" "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/zig-toolchain-x86_64-linux-gnu.2.17.cmake" "-DSDL_TEST_LIBRARY=OFF"
-            cmake --build . --parallel
-          } finally {
-            Pop-Location
-          }
+          cmake $submodulePath -B build "-DCMAKE_BUILD_TYPE=Release" "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/zig-toolchain-x86_64-linux-gnu.2.17.cmake" "-DSDL_TEST_LIBRARY=OFF"
+          cmake --build build --parallel
           New-Item -ItemType Directory -Force runtimes/linux-x64/native
           Copy-Item build/libSDL3.so runtimes/linux-x64/native
         }
@@ -206,13 +165,8 @@ try {
           # Build
           Remove-Item -Recurse -Force build -ErrorAction Ignore
           New-Item -ItemType Directory build
-          Push-Location build
-          try {
-            cmake $submodulePath "-DCMAKE_SYSTEM_NAME=iOS" "-DCMAKE_OSX_SYSROOT=iphoneos" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=9.0" "-DCMAKE_BUILD_TYPE=Release" "-DSDL_STATIC=ON" "-DSDL_TEST_LIBRARY=OFF"
-            cmake --build . --parallel
-          } finally {
-            Pop-Location
-          }
+          cmake $submodulePath -B build "-DCMAKE_SYSTEM_NAME=iOS" "-DCMAKE_OSX_SYSROOT=iphoneos" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=9.0" "-DCMAKE_BUILD_TYPE=Release" "-DSDL_STATIC=ON" "-DSDL_TEST_LIBRARY=OFF"
+          cmake --build build --parallel
           New-Item -ItemType Directory -Force runtimes/ios/native
           Copy-Item build/libSDL3.a runtimes/ios/native
         }
@@ -221,13 +175,8 @@ try {
           # Build
           Remove-Item -Recurse -Force build -ErrorAction Ignore
           New-Item -ItemType Directory build
-          Push-Location build
-          try {
-            cmake $submodulePath "-DCMAKE_SYSTEM_NAME=iOS" "-DCMAKE_OSX_SYSROOT=iphonesimulator" "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=9.0" "-DCMAKE_BUILD_TYPE=Release" "-DSDL_STATIC=ON" "-DSDL_TEST_LIBRARY=OFF"
-            cmake --build . --parallel
-          } finally {
-            Pop-Location
-          }
+          cmake $submodulePath -B build "-DCMAKE_SYSTEM_NAME=iOS" "-DCMAKE_OSX_SYSROOT=iphonesimulator" "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=9.0" "-DCMAKE_BUILD_TYPE=Release" "-DSDL_STATIC=ON" "-DSDL_TEST_LIBRARY=OFF"
+          cmake --build build --parallel
           New-Item -ItemType Directory -Force runtimes/iossimulator/native
           Copy-Item build/libSDL3.a runtimes/iossimulator/native
         }
@@ -236,13 +185,8 @@ try {
           # Build
           Remove-Item -Recurse -Force build -ErrorAction Ignore
           New-Item -ItemType Directory build
-          Push-Location build
-          try {
-            cmake $submodulePath "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=10.11" "-DCMAKE_BUILD_TYPE=Release" "-DSDL_TEST_LIBRARY=OFF"
-            cmake --build . --parallel
-          } finally {
-            Pop-Location
-          }
+          cmake $submodulePath -B build "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=10.11" "-DCMAKE_BUILD_TYPE=Release" "-DSDL_TEST_LIBRARY=OFF"
+          cmake --build build --parallel
           New-Item -ItemType Directory -Force runtimes/osx/native
           Copy-Item build/libSDL3.dylib runtimes/osx/native
         }
@@ -251,13 +195,8 @@ try {
           # Build
           Remove-Item -Recurse -Force build -ErrorAction Ignore
           New-Item -ItemType Directory build
-          Push-Location build
-          try {
-            cmake $submodulePath "-DCMAKE_SYSTEM_NAME=tvOS" "-DCMAKE_OSX_SYSROOT=appletvos" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=9.0" "-DCMAKE_BUILD_TYPE=Release" "-DSDL_STATIC=ON" "-DSDL_TEST_LIBRARY=OFF"
-            cmake --build . --parallel
-          } finally {
-            Pop-Location
-          }
+          cmake $submodulePath -B build "-DCMAKE_SYSTEM_NAME=tvOS" "-DCMAKE_OSX_SYSROOT=appletvos" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=9.0" "-DCMAKE_BUILD_TYPE=Release" "-DSDL_STATIC=ON" "-DSDL_TEST_LIBRARY=OFF"
+          cmake --build build --parallel
           New-Item -ItemType Directory -Force runtimes/tvos/native
           Copy-Item build/libSDL3.a runtimes/tvos/native
         }
@@ -266,13 +205,8 @@ try {
           # Build
           Remove-Item -Recurse -Force build -ErrorAction Ignore
           New-Item -ItemType Directory build
-          Push-Location build
-          try {
-            cmake $submodulePath "-DCMAKE_SYSTEM_NAME=tvOS" "-DCMAKE_OSX_SYSROOT=appletvsimulator" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=9.0" "-DCMAKE_BUILD_TYPE=Release" "-DSDL_STATIC=ON" "-DSDL_TEST_LIBRARY=OFF"
-            cmake --build . --parallel
-          } finally {
-            Pop-Location
-          }
+          cmake $submodulePath -B build "-DCMAKE_SYSTEM_NAME=tvOS" "-DCMAKE_OSX_SYSROOT=appletvsimulator" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=9.0" "-DCMAKE_BUILD_TYPE=Release" "-DSDL_STATIC=ON" "-DSDL_TEST_LIBRARY=OFF"
+          cmake --build build --parallel
           New-Item -ItemType Directory -Force runtimes/tvossimulator/native
           Copy-Item build/libSDL3.a runtimes/tvossimulator/native
         }
