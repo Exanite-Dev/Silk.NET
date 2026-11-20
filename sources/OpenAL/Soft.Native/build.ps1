@@ -8,6 +8,7 @@ try {
   # Config
   $repoRoot = Join-Path $PSScriptRoot "../../.."
   $submodulePath = Join-Path $repoRoot "eng/submodules/openal-soft"
+
   $supportedRuntimes = @(
     "android-arm64",
     "android-arm",
@@ -40,6 +41,21 @@ try {
     exit 1
   }
 
+  # CMake
+  function Build-CMake {
+    Remove-Item -Recurse -Force build -ErrorAction Ignore
+    New-Item -ItemType Directory build
+    cmake $submodulePath -B build -G Ninja ($args | ForEach-Object { $_ })
+    cmake --build build --parallel
+  }
+
+  # C++ modules needs clang-scan-deps, and gets auto-enabled when using Ninja, which leads to the Linux Zig builds failing
+  function Get-CMakeSharedArgs { @("-DCMAKE_BUILD_TYPE=Release", "-DALSOFT_UTILS=OFF", "-DALSOFT_EXAMPLES=OFF", "-DALSOFT_ENABLE_MODULES=OFF", "-DCMAKE_CXX_SCAN_FOR_MODULES=OFF") }
+  function Get-CMakeWindowsArgs { @("-DALSOFT_BUILD_ROUTER=ON", "-DALSOFT_REQUIRE_WINMM=ON", "-DALSOFT_REQUIRE_DSOUND=ON", "-DALSOFT_REQUIRE_WASAPI=ON") }
+  function Get-CMakeAndroidArgs { @("-DANDROID_PLATFORM=21", "-DALSOFT_EMBED_HRTF_DATA=TRUE", "-DALSOFT_REQUIRE_OPENSL=ON") }
+  function Get-CMakeLinuxArgs { @("-DALSOFT_REQUIRE_RTKIT=ON", "-DALSOFT_REQUIRE_ALSA=ON", "-DALSOFT_REQUIRE_OSS=ON", "-DALSOFT_REQUIRE_PORTAUDIO=ON", "-DALSOFT_REQUIRE_PULSEAUDIO=ON", "-DALSOFT_REQUIRE_JACK=ON", "-DALSOFT_REQUIRE_PIPEWIRE=ON") }
+  function Get-CMakeAppleArgs { @("-DALSOFT_REQUIRE_COREAUDIO=ON") }
+
   switch ($true) {
     $IsWindows {
       $vsPath = & "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe" -latest -products "*" -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
@@ -48,25 +64,19 @@ try {
         "win-arm64" {
           # Build
           & "$vsPath/Common7/Tools/Launch-VsDevShell.ps1" -HostArch amd64 -Arch arm64 -SkipAutomaticLocation
-          Remove-Item -Recurse -Force build -ErrorAction Ignore
-          New-Item -ItemType Directory build
-          cmake $submodulePath -B build "-DCMAKE_BUILD_TYPE=Release" "-DALSOFT_UTILS=OFF" "-DALSOFT_EXAMPLES=OFF" "-DALSOFT_BUILD_ROUTER=ON" "-DALSOFT_REQUIRE_WINMM=ON" "-DALSOFT_REQUIRE_DSOUND=ON" "-DALSOFT_REQUIRE_WASAPI=ON" -A arm64
-          cmake --build build --parallel --config Release
+          Build-CMake (Get-CMakeSharedArgs) (Get-CMakeWindowsArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/shared-toolchain.cmake"
           New-Item -ItemType Directory -Force runtimes/win-arm64/native
-          Copy-Item build/Release/OpenAL32.dll runtimes/win-arm64/native
-          Copy-Item build/Release/soft_oal.dll runtimes/win-arm64/native
+          Copy-Item build/OpenAL32.dll runtimes/win-arm64/native
+          Copy-Item build/soft_oal.dll runtimes/win-arm64/native
         }
 
         "win-x64" {
           # Build
           & "$vsPath/Common7/Tools/Launch-VsDevShell.ps1" -HostArch amd64 -Arch amd64 -SkipAutomaticLocation
-          Remove-Item -Recurse -Force build -ErrorAction Ignore
-          New-Item -ItemType Directory build
-          cmake $submodulePath -B build "-DCMAKE_BUILD_TYPE=Release" "-DALSOFT_UTILS=OFF" "-DALSOFT_EXAMPLES=OFF" "-DALSOFT_BUILD_ROUTER=ON" "-DALSOFT_REQUIRE_WINMM=ON" "-DALSOFT_REQUIRE_DSOUND=ON" "-DALSOFT_REQUIRE_WASAPI=ON" -A x64
-          cmake --build build --parallel --config Release
+          Build-CMake (Get-CMakeSharedArgs) (Get-CMakeWindowsArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/shared-toolchain.cmake"
           New-Item -ItemType Directory -Force runtimes/win-x64/native
-          Copy-Item build/Release/OpenAL32.dll runtimes/win-x64/native
-          Copy-Item build/Release/soft_oal.dll runtimes/win-x64/native
+          Copy-Item build/OpenAL32.dll runtimes/win-x64/native
+          Copy-Item build/soft_oal.dll runtimes/win-x64/native
         }
       }
     }
@@ -115,76 +125,49 @@ try {
       switch ($runtime) {
         "android-arm64" {
           # Build
-          Remove-Item -Recurse -Force build -ErrorAction Ignore
-          New-Item -ItemType Directory build
-          cmake $submodulePath -B build "-DANDROID_ABI=arm64-v8a" "-DCMAKE_TOOLCHAIN_FILE=$env:ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" "-DANDROID_PLATFORM=21" "-DCMAKE_BUILD_TYPE=Release" "-DALSOFT_UTILS=OFF" "-DALSOFT_EXAMPLES=OFF" "-DALSOFT_EMBED_HRTF_DATA=TRUE" "-DALSOFT_REQUIRE_OPENSL=ON"
-          cmake --build build --parallel
+          Build-CMake (Get-CMakeSharedArgs) (Get-CMakeAndroidArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/android-toolchain-arm64-v8a.cmake"
           New-Item -ItemType Directory -Force runtimes/android-arm64/native
           Copy-Item build/libopenal.so runtimes/android-arm64/native
         }
 
         "android-arm" {
           # Build
-          Remove-Item -Recurse -Force build -ErrorAction Ignore
-          New-Item -ItemType Directory build
-          cmake $submodulePath -B build "-DANDROID_ABI=armeabi-v7a" "-DCMAKE_TOOLCHAIN_FILE=$env:ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" "-DANDROID_PLATFORM=21" "-DCMAKE_BUILD_TYPE=Release" "-DALSOFT_UTILS=OFF" "-DALSOFT_EXAMPLES=OFF" "-DALSOFT_EMBED_HRTF_DATA=TRUE" "-DALSOFT_REQUIRE_OPENSL=ON"
-          cmake --build build --parallel
+          Build-CMake (Get-CMakeSharedArgs) (Get-CMakeAndroidArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/android-toolchain-armeabi-v7a.cmake"
           New-Item -ItemType Directory -Force runtimes/android-arm/native
           Copy-Item build/libopenal.so runtimes/android-arm/native
         }
 
         "android-x64" {
           # Build
-          Remove-Item -Recurse -Force build -ErrorAction Ignore
-          New-Item -ItemType Directory build
-          cmake $submodulePath -B build "-DANDROID_ABI=x86_64" "-DCMAKE_TOOLCHAIN_FILE=$env:ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" "-DANDROID_PLATFORM=21" "-DCMAKE_BUILD_TYPE=Release" "-DALSOFT_UTILS=OFF" "-DALSOFT_EXAMPLES=OFF" "-DALSOFT_EMBED_HRTF_DATA=TRUE" "-DALSOFT_REQUIRE_OPENSL=ON"
-          cmake --build build --parallel
+          Build-CMake (Get-CMakeSharedArgs) (Get-CMakeAndroidArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/android-toolchain-x86_64.cmake"
           New-Item -ItemType Directory -Force runtimes/android-x64/native
           Copy-Item build/libopenal.so runtimes/android-x64/native
         }
 
         "android-x86" {
           # Build
-          Remove-Item -Recurse -Force build -ErrorAction Ignore
-          New-Item -ItemType Directory build
-          cmake $submodulePath -B build "-DANDROID_ABI=x86" "-DCMAKE_TOOLCHAIN_FILE=$env:ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" "-DANDROID_PLATFORM=21" "-DCMAKE_BUILD_TYPE=Release" "-DALSOFT_UTILS=OFF" "-DALSOFT_EXAMPLES=OFF"
-          cmake --build build --parallel
+          Build-CMake (Get-CMakeSharedArgs) (Get-CMakeAndroidArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/android-toolchain-x86.cmake"
           New-Item -ItemType Directory -Force runtimes/android-x86/native
           Copy-Item build/libopenal.so runtimes/android-x86/native
         }
 
         "linux-arm64" {
-          # Dependencies
-          apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-
           # Build
-          Remove-Item -Recurse -Force build -ErrorAction Ignore
-          New-Item -ItemType Directory build
-          cmake $submodulePath -B build "-DCMAKE_BUILD_TYPE=Release" "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/aarch64-linux-gnu.cmake" "-DALSOFT_UTILS=OFF" "-DALSOFT_EXAMPLES=OFF" "-DALSOFT_REQUIRE_RTKIT=ON" "-DALSOFT_REQUIRE_ALSA=ON" "-DALSOFT_REQUIRE_OSS=ON" "-DALSOFT_REQUIRE_PORTAUDIO=ON" "-DALSOFT_REQUIRE_PULSEAUDIO=ON" "-DALSOFT_REQUIRE_JACK=ON" "-DALSOFT_REQUIRE_PIPEWIRE=ON"
-          cmake --build build --parallel
+          Build-CMake (Get-CMakeSharedArgs) (Get-CMakeLinuxArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/zig-toolchain-aarch64-linux-gnu.2.28.cmake"
           New-Item -ItemType Directory -Force runtimes/linux-arm64/native
           Copy-Item build/libopenal.so runtimes/linux-arm64/native
         }
 
         "linux-arm" {
-          # Dependencies
-          apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
-
           # Build
-          Remove-Item -Recurse -Force build -ErrorAction Ignore
-          New-Item -ItemType Directory build
-          cmake $submodulePath -B build "-DCMAKE_BUILD_TYPE=Release" "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/arm-linux-gnueabihf.cmake" "-DALSOFT_UTILS=OFF" "-DALSOFT_EXAMPLES=OFF" "-DALSOFT_REQUIRE_RTKIT=ON" "-DALSOFT_REQUIRE_ALSA=ON" "-DALSOFT_REQUIRE_OSS=ON" "-DALSOFT_REQUIRE_PORTAUDIO=ON" "-DALSOFT_REQUIRE_PULSEAUDIO=ON" "-DALSOFT_REQUIRE_JACK=ON" "-DALSOFT_REQUIRE_PIPEWIRE=ON"
-          cmake --build build --parallel
+          Build-CMake (Get-CMakeSharedArgs) (Get-CMakeLinuxArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/zig-toolchain-arm-linux-gnueabihf.2.34.cmake"
           New-Item -ItemType Directory -Force runtimes/linux-arm/native
           Copy-Item build/libopenal.so runtimes/linux-arm/native
         }
 
         "linux-x64" {
           # Build
-          Remove-Item -Recurse -Force build -ErrorAction Ignore
-          New-Item -ItemType Directory build
-          cmake $submodulePath -B build "-DCMAKE_BUILD_TYPE=Release" "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/x86_64-linux-gnu.cmake" "-DALSOFT_UTILS=OFF" "-DALSOFT_EXAMPLES=OFF" "-DALSOFT_REQUIRE_RTKIT=ON" "-DALSOFT_REQUIRE_ALSA=ON" "-DALSOFT_REQUIRE_OSS=ON" "-DALSOFT_REQUIRE_PORTAUDIO=ON" "-DALSOFT_REQUIRE_PULSEAUDIO=ON" "-DALSOFT_REQUIRE_JACK=ON" "-DALSOFT_REQUIRE_PIPEWIRE=ON"
-          cmake --build build --parallel
+          Build-CMake (Get-CMakeSharedArgs) (Get-CMakeLinuxArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/zig-toolchain-x86_64-linux-gnu.2.28.cmake"
           New-Item -ItemType Directory -Force runtimes/linux-x64/native
           Copy-Item build/libopenal.so runtimes/linux-x64/native
         }
@@ -195,50 +178,35 @@ try {
       switch ($runtime) {
         "ios" {
           # Build
-          Remove-Item -Recurse -Force build -ErrorAction Ignore
-          New-Item -ItemType Directory build
-          cmake $submodulePath -B build "-DCMAKE_SYSTEM_NAME=iOS" "-DCMAKE_OSX_SYSROOT=iphoneos" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=16.3" "-DCMAKE_BUILD_TYPE=Release" "-DALSOFT_UTILS=OFF" "-DALSOFT_EXAMPLES=OFF" "-DALSOFT_REQUIRE_COREAUDIO=ON"
-          cmake --build build --parallel
+          Build-CMake (Get-CMakeSharedArgs) (Get-CMakeAppleArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/shared-toolchain.cmake" "-DCMAKE_SYSTEM_NAME=iOS" "-DCMAKE_OSX_SYSROOT=iphoneos" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=16.3"
           New-Item -ItemType Directory -Force runtimes/ios/native
           Copy-Item build/libopenal.dylib runtimes/ios/native
         }
 
         "iossimulator" {
           # Build
-          Remove-Item -Recurse -Force build -ErrorAction Ignore
-          New-Item -ItemType Directory build
-          cmake $submodulePath -B build "-DCMAKE_SYSTEM_NAME=iOS" "-DCMAKE_OSX_SYSROOT=iphonesimulator" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=16.3" "-DCMAKE_BUILD_TYPE=Release" "-DALSOFT_UTILS=OFF" "-DALSOFT_EXAMPLES=OFF" "-DALSOFT_REQUIRE_COREAUDIO=ON"
-          cmake --build build --parallel
+          Build-CMake (Get-CMakeSharedArgs) (Get-CMakeAppleArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/shared-toolchain.cmake" "-DCMAKE_SYSTEM_NAME=iOS" "-DCMAKE_OSX_SYSROOT=iphonesimulator" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=16.3"
           New-Item -ItemType Directory -Force runtimes/iossimulator/native
           Copy-Item build/libopenal.dylib runtimes/iossimulator/native
         }
 
         "osx" {
           # Build
-          Remove-Item -Recurse -Force build -ErrorAction Ignore
-          New-Item -ItemType Directory build
-          cmake $submodulePath -B build "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=13.3" "-DCMAKE_BUILD_TYPE=Release" "-DALSOFT_UTILS=OFF" "-DALSOFT_EXAMPLES=OFF" "-DALSOFT_REQUIRE_COREAUDIO=ON"
-          cmake --build build --parallel
+          Build-CMake (Get-CMakeSharedArgs) (Get-CMakeAppleArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/shared-toolchain.cmake" "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=13.3"
           New-Item -ItemType Directory -Force runtimes/osx/native
           Copy-Item build/libopenal.dylib runtimes/osx/native
         }
 
         "tvos" {
           # Build
-          Remove-Item -Recurse -Force build -ErrorAction Ignore
-          New-Item -ItemType Directory build
-          cmake $submodulePath -B build "-DCMAKE_SYSTEM_NAME=tvOS" "-DCMAKE_OSX_SYSROOT=appletvos" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=16.3" "-DCMAKE_BUILD_TYPE=Release" "-DALSOFT_UTILS=OFF" "-DALSOFT_EXAMPLES=OFF" "-DALSOFT_REQUIRE_COREAUDIO=ON"
-          cmake --build build --parallel
+          Build-CMake (Get-CMakeSharedArgs) (Get-CMakeAppleArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/shared-toolchain.cmake" "-DCMAKE_SYSTEM_NAME=tvOS" "-DCMAKE_OSX_SYSROOT=appletvos" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=16.3"
           New-Item -ItemType Directory -Force runtimes/tvos/native
           Copy-Item build/libopenal.dylib runtimes/tvos/native
         }
 
         "tvossimulator" {
           # Build
-          Remove-Item -Recurse -Force build -ErrorAction Ignore
-          New-Item -ItemType Directory build
-          cmake $submodulePath -B build "-DCMAKE_SYSTEM_NAME=tvOS" "-DCMAKE_OSX_SYSROOT=appletvsimulator" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=16.3" "-DCMAKE_BUILD_TYPE=Release" "-DALSOFT_UTILS=OFF" "-DALSOFT_EXAMPLES=OFF" "-DALSOFT_REQUIRE_COREAUDIO=ON"
-          cmake --build build --parallel
+          Build-CMake (Get-CMakeSharedArgs) (Get-CMakeAppleArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/shared-toolchain.cmake" "-DCMAKE_SYSTEM_NAME=tvOS" "-DCMAKE_OSX_SYSROOT=appletvsimulator" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=16.3"
           New-Item -ItemType Directory -Force runtimes/tvossimulator/native
           Copy-Item build/libopenal.dylib runtimes/tvossimulator/native
         }

@@ -22,12 +22,33 @@ foreach ($chosenJob in $chosenJobs) {
 
   $job = $buildsJson.native.jobs.PSObject.Properties[$chosenJob];
   foreach ($build in $job.Value.builds.PSObject.Properties) {
+    $dir = $job.Value.path
+    $runtime = $build.Name
+
+    # $outputs is passed to actions/upload-artifact, which expects globs
+    $outputs = @()
+    if ($runtime -like "*-*") {
+      $outputs += "$dir/runtimes/$runtime/**/*"
+    } else {
+      $outputs += "$dir/runtimes/$runtime*/**/*"
+    }
+
+    $outputs += "$dir/lib/*$runtime*/**/*"
+    $outputs += "$dir/*$runtime*/**/*"
+
+    if ("additionalOutputs" -in $build.Value.PSObject.Properties.Name) {
+      foreach ($additionalOutput in $build.Value.additionalOutputs) {
+        $outputs += "$dir/$additionalOutput"
+      }
+    }
+
     $matrix += [ordered]@{
       job = $job.Name
-      os = $build.Value
-      runtime = $build.Name
+      runner = $build.Value.runner
+      runtime = $runtime
 
-      dir = $job.Value.path
+      dir = $dir
+      outputs = $outputs -join "`n"
     }
   }
 }

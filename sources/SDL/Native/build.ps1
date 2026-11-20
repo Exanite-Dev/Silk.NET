@@ -9,7 +9,10 @@ try {
   $repoRoot = Join-Path $PSScriptRoot "../../.."
   $submodulePath = Join-Path $repoRoot "eng/submodules/sdl"
   $supportedRuntimes = @(
-    "android",
+    "android-arm64",
+    "android-arm",
+    "android-x64",
+    "android-x86",
     "ios",
     "iossimulator",
     "linux-arm64",
@@ -37,6 +40,17 @@ try {
     exit 1
   }
 
+  # CMake
+  function Build-CMake {
+    Remove-Item -Recurse -Force build -ErrorAction Ignore
+    New-Item -ItemType Directory build
+    cmake $submodulePath -B build -G Ninja ($args | ForEach-Object { $_ })
+    cmake --build build --parallel
+  }
+
+  function Get-CMakeSharedArgs { @("-DCMAKE_BUILD_TYPE=Release", "-DSDL_TEST_LIBRARY=OFF") }
+  function Get-CMakeAndroidArgs { @("-DANDROID_PLATFORM=21", "-DSDL_ANDROID_JAR=ON", "-DCMAKE_INSTALL_PREFIX=$PWD/build/install") }
+
   switch ($true) {
     $IsWindows {
       $vsPath = & "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe" -latest -products "*" -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
@@ -45,10 +59,7 @@ try {
         "win-arm64" {
           # Build
           & "$vsPath/Common7/Tools/Launch-VsDevShell.ps1" -HostArch amd64 -Arch arm64 -SkipAutomaticLocation
-          Remove-Item -Recurse -Force build -ErrorAction Ignore
-          New-Item -ItemType Directory build
-          cmake $submodulePath -B build -G Ninja "-DCMAKE_BUILD_TYPE=Release" "-DSDL_TEST_LIBRARY=OFF"
-          cmake --build build --parallel
+          Build-CMake (Get-CMakeSharedArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/shared-toolchain.cmake"
           New-Item -ItemType Directory -Force runtimes/win-arm64/native
           Copy-Item build/SDL3.dll runtimes/win-arm64/native
         }
@@ -56,10 +67,7 @@ try {
         "win-x64" {
           # Build
           & "$vsPath/Common7/Tools/Launch-VsDevShell.ps1" -HostArch amd64 -Arch amd64 -SkipAutomaticLocation
-          Remove-Item -Recurse -Force build -ErrorAction Ignore
-          New-Item -ItemType Directory build
-          cmake $submodulePath -B build -G Ninja "-DCMAKE_BUILD_TYPE=Release" "-DSDL_TEST_LIBRARY=OFF"
-          cmake --build build --parallel
+          Build-CMake (Get-CMakeSharedArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/shared-toolchain.cmake"
           New-Item -ItemType Directory -Force runtimes/win-x64/native
           Copy-Item build/SDL3.dll runtimes/win-x64/native
         }
@@ -114,45 +122,59 @@ try {
       }
 
       switch ($runtime) {
-        "android" {
+        "android-arm64" {
           # Build
-          & python3 $submodulePath/build-scripts/build-release.py --actions android --root $submodulePath
-          New-Item -ItemType Directory -Force runtimes/android-x86/native, runtimes/android-x64/native, runtimes/android-arm/native, runtimes/android-arm64/native, android
-          Copy-Item $submodulePath/install-android/arm64-v8a-install/lib/libSDL3.so runtimes/android-arm64/native
-          Copy-Item $submodulePath/install-android/armeabi-v7a-install/lib/libSDL3.so runtimes/android-arm/native
-          Copy-Item $submodulePath/install-android/x86-install/lib/libSDL3.so runtimes/android-x86/native
-          Copy-Item $submodulePath/install-android/x86_64-install/lib/libSDL3.so runtimes/android-x64/native
-          $jars = @(Get-ChildItem $submodulePath/install-android/armeabi-v7a-install/share/java/SDL3/SDL3-*.jar | Sort-Object FullName)
-          Copy-Item $jars[1].FullName android/SDL3.jar
-          Copy-Item "$(Split-Path -Parent $jars[1].FullName)/proguard.txt" android/proguard.txt
+          Build-CMake (Get-CMakeSharedArgs) (Get-CMakeAndroidArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/android-toolchain-arm64-v8a.cmake"
+          cmake --install build
+          New-Item -ItemType Directory -Force runtimes/android-arm64/native
+          Copy-Item build/install/lib/libSDL3.so runtimes/android-arm64/native
+        }
+
+        "android-arm" {
+          # Build
+          Build-CMake (Get-CMakeSharedArgs) (Get-CMakeAndroidArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/android-toolchain-armeabi-v7a.cmake"
+          cmake --install build
+          New-Item -ItemType Directory -Force runtimes/android-arm/native
+          Copy-Item build/install/lib/libSDL3.so runtimes/android-arm/native
+        }
+
+        "android-x64" {
+          # Build
+          Build-CMake (Get-CMakeSharedArgs) (Get-CMakeAndroidArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/android-toolchain-x86_64.cmake"
+          cmake --install build
+          New-Item -ItemType Directory -Force runtimes/android-x64/native, android
+          Copy-Item build/install/lib/libSDL3.so runtimes/android-x64/native
+
+          # The jar and proguard files are the same for all 4 Android jobs
+          Copy-Item (Get-ChildItem build/install/share/java/SDL3/SDL3-*.jar -Exclude "*-sources.jar") android/SDL3.jar
+          Copy-Item build/install/share/java/SDL3/proguard.txt android/proguard.txt
+        }
+
+        "android-x86" {
+          # Build
+          Build-CMake (Get-CMakeSharedArgs) (Get-CMakeAndroidArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/android-toolchain-x86.cmake"
+          cmake --install build
+          New-Item -ItemType Directory -Force runtimes/android-x86/native
+          Copy-Item build/install/lib/libSDL3.so runtimes/android-x86/native
         }
 
         "linux-arm64" {
           # Build
-          Remove-Item -Recurse -Force build -ErrorAction Ignore
-          New-Item -ItemType Directory build
-          cmake $submodulePath -B build "-DCMAKE_BUILD_TYPE=Release" "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/zig-toolchain-aarch64-linux-gnu.2.17.cmake" "-DSDL_TEST_LIBRARY=OFF"
-          cmake --build build --parallel
+          Build-CMake (Get-CMakeSharedArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/zig-toolchain-aarch64-linux-gnu.2.17.cmake"
           New-Item -ItemType Directory -Force runtimes/linux-arm64/native
           Copy-Item build/libSDL3.so runtimes/linux-arm64/native
         }
 
         "linux-arm" {
           # Build
-          Remove-Item -Recurse -Force build -ErrorAction Ignore
-          New-Item -ItemType Directory build
-          cmake $submodulePath -B build "-DCMAKE_BUILD_TYPE=Release" "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/zig-toolchain-arm-linux-gnueabihf.2.34.cmake" "-DSDL_TEST_LIBRARY=OFF"
-          cmake --build build --parallel
+          Build-CMake (Get-CMakeSharedArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/zig-toolchain-arm-linux-gnueabihf.2.34.cmake"
           New-Item -ItemType Directory -Force runtimes/linux-arm/native
           Copy-Item build/libSDL3.so runtimes/linux-arm/native
         }
 
         "linux-x64" {
           # Build
-          Remove-Item -Recurse -Force build -ErrorAction Ignore
-          New-Item -ItemType Directory build
-          cmake $submodulePath -B build "-DCMAKE_BUILD_TYPE=Release" "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/zig-toolchain-x86_64-linux-gnu.2.17.cmake" "-DSDL_TEST_LIBRARY=OFF"
-          cmake --build build --parallel
+          Build-CMake (Get-CMakeSharedArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/zig-toolchain-x86_64-linux-gnu.2.17.cmake"
           New-Item -ItemType Directory -Force runtimes/linux-x64/native
           Copy-Item build/libSDL3.so runtimes/linux-x64/native
         }
@@ -163,50 +185,35 @@ try {
       switch ($runtime) {
         "ios" {
           # Build
-          Remove-Item -Recurse -Force build -ErrorAction Ignore
-          New-Item -ItemType Directory build
-          cmake $submodulePath -B build "-DCMAKE_SYSTEM_NAME=iOS" "-DCMAKE_OSX_SYSROOT=iphoneos" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=9.0" "-DCMAKE_BUILD_TYPE=Release" "-DSDL_STATIC=ON" "-DSDL_TEST_LIBRARY=OFF"
-          cmake --build build --parallel
+          Build-CMake (Get-CMakeSharedArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/shared-toolchain.cmake" "-DCMAKE_SYSTEM_NAME=iOS" "-DCMAKE_OSX_SYSROOT=iphoneos" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=9.0" "-DSDL_STATIC=ON"
           New-Item -ItemType Directory -Force runtimes/ios/native
           Copy-Item build/libSDL3.a runtimes/ios/native
         }
 
         "iossimulator" {
           # Build
-          Remove-Item -Recurse -Force build -ErrorAction Ignore
-          New-Item -ItemType Directory build
-          cmake $submodulePath -B build "-DCMAKE_SYSTEM_NAME=iOS" "-DCMAKE_OSX_SYSROOT=iphonesimulator" "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=9.0" "-DCMAKE_BUILD_TYPE=Release" "-DSDL_STATIC=ON" "-DSDL_TEST_LIBRARY=OFF"
-          cmake --build build --parallel
+          Build-CMake (Get-CMakeSharedArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/shared-toolchain.cmake" "-DCMAKE_SYSTEM_NAME=iOS" "-DCMAKE_OSX_SYSROOT=iphonesimulator" "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=9.0" "-DSDL_STATIC=ON"
           New-Item -ItemType Directory -Force runtimes/iossimulator/native
           Copy-Item build/libSDL3.a runtimes/iossimulator/native
         }
 
         "osx" {
           # Build
-          Remove-Item -Recurse -Force build -ErrorAction Ignore
-          New-Item -ItemType Directory build
-          cmake $submodulePath -B build "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=10.11" "-DCMAKE_BUILD_TYPE=Release" "-DSDL_TEST_LIBRARY=OFF"
-          cmake --build build --parallel
+          Build-CMake (Get-CMakeSharedArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/shared-toolchain.cmake" "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=10.11"
           New-Item -ItemType Directory -Force runtimes/osx/native
           Copy-Item build/libSDL3.dylib runtimes/osx/native
         }
 
         "tvos" {
           # Build
-          Remove-Item -Recurse -Force build -ErrorAction Ignore
-          New-Item -ItemType Directory build
-          cmake $submodulePath -B build "-DCMAKE_SYSTEM_NAME=tvOS" "-DCMAKE_OSX_SYSROOT=appletvos" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=9.0" "-DCMAKE_BUILD_TYPE=Release" "-DSDL_STATIC=ON" "-DSDL_TEST_LIBRARY=OFF"
-          cmake --build build --parallel
+          Build-CMake (Get-CMakeSharedArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/shared-toolchain.cmake" "-DCMAKE_SYSTEM_NAME=tvOS" "-DCMAKE_OSX_SYSROOT=appletvos" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=9.0" "-DSDL_STATIC=ON"
           New-Item -ItemType Directory -Force runtimes/tvos/native
           Copy-Item build/libSDL3.a runtimes/tvos/native
         }
 
         "tvossimulator" {
           # Build
-          Remove-Item -Recurse -Force build -ErrorAction Ignore
-          New-Item -ItemType Directory build
-          cmake $submodulePath -B build "-DCMAKE_SYSTEM_NAME=tvOS" "-DCMAKE_OSX_SYSROOT=appletvsimulator" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=9.0" "-DCMAKE_BUILD_TYPE=Release" "-DSDL_STATIC=ON" "-DSDL_TEST_LIBRARY=OFF"
-          cmake --build build --parallel
+          Build-CMake (Get-CMakeSharedArgs) "-DCMAKE_TOOLCHAIN_FILE=$repoRoot/eng/native/cmake/shared-toolchain.cmake" "-DCMAKE_SYSTEM_NAME=tvOS" "-DCMAKE_OSX_SYSROOT=appletvsimulator" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DCMAKE_OSX_DEPLOYMENT_TARGET=9.0" "-DSDL_STATIC=ON"
           New-Item -ItemType Directory -Force runtimes/tvossimulator/native
           Copy-Item build/libSDL3.a runtimes/tvossimulator/native
         }
