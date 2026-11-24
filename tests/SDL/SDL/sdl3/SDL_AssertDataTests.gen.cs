@@ -12,7 +12,6 @@ namespace Silk.NET.SDL.UnitTests;
 public static unsafe partial class SDL_AssertDataTests
 {
     /// <summary>Validates that the <see cref = "AssertData"/> struct is blittable.</summary>
-
     [Test]
     public static void IsBlittableTest()
     {
@@ -20,7 +19,6 @@ public static unsafe partial class SDL_AssertDataTests
     }
 
     /// <summary>Validates that the <see cref = "AssertData"/> struct has the right <see cref = "LayoutKind"/>.</summary>
-
     [Test]
     public static void IsLayoutSequentialTest()
     {
@@ -28,13 +26,12 @@ public static unsafe partial class SDL_AssertDataTests
     }
 
     /// <summary>Validates that the <see cref = "AssertData"/> struct has the correct size.</summary>
-
     [Test]
     public static void SizeOfTest()
     {
         if (Environment.Is64BitProcess)
         {
-            Assert.That(sizeof(AssertData), Is.EqualTo(48));
+            Assert.That(sizeof(AssertData), Is.EqualTo(123123123));
         }
         else
         {
